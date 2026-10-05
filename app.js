@@ -23,11 +23,15 @@ const KIT = [
 // x right, z towards the bottom of the sheet, y up) and scaled by 0.1.
 const SHEET_H = 0.707;
 const TERM_X = 4.7;              // terminal position on the sheet, design units
-const AUTO_JOIN = 0.6;           // terminals closer than this connect automatically
-const AUTO_KEEP = 0.7;           // ...and stay connected until further apart than this
+// Distances are in sheet widths, so they work the same whatever size the sheets are printed.
+// Sheets laid corner to corner put their dots about 0.65 apart, so the join distance
+// has to be comfortably bigger than that.
+const AUTO_JOIN = 1.0;           // dots closer than this connect automatically
+const AUTO_KEEP = 1.3;           // ...and stay connected until further apart than this
+const NEAR_MISS = 1.8;           // closer than this (but not joined): show a hint
 const R_WIRE = 1e-3;
 
-const state = { V: 6, Rb: 6, Rr: 10, Rv: 10, closed: true, mode: 'electron', mode3D: false };
+const state = { V: 6, Rb: 6, Rr: 10, Rv: 10, closed: true, mode: 'electron', mode3D: false, locked: false };
 
 // ---------------------------------------------------------------------------
 // Circuit solver (modified nodal analysis)
@@ -261,6 +265,7 @@ const presentSheets = () => [...sheets.values()].filter(s => s.present);
 // ---------------------------------------------------------------------------
 let manualWires = [];   // {a, b}
 let autoWires = [];
+let nearMiss = null;    // closest pair of loose dots, for the hint
 let selected = null;
 const wireKey = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
 const sheetOf = key => key.split(':')[0];
@@ -269,6 +274,7 @@ function updateAutoWires() {
   const keys = presentSheets().flatMap(s => s.keys);
   const pos = Object.fromEntries(keys.map(k => [k, terminalPos(k)]));
   const dist = (a, b) => Math.hypot(pos[a][0] - pos[b][0], pos[a][1] - pos[b][1]);
+  if (state.locked) { autoWires = autoWires.filter(w => pos[w.a] && pos[w.b]); nearMiss = null; return; }
   const keep = autoWires.filter(w => pos[w.a] && pos[w.b] && dist(w.a, w.b) < AUTO_KEEP);
   const used = new Set(keep.flatMap(w => [w.a, w.b]));
   const cands = [];
@@ -284,6 +290,15 @@ function updateAutoWires() {
     keep.push({ a: c.a, b: c.b }); used.add(c.a); used.add(c.b);
   }
   autoWires = keep;
+  // Closest pair of dots that are still loose (not joined by any wire)
+  const linked = new Set([...used, ...manualWires.flatMap(w => [w.a, w.b])]);
+  nearMiss = null;
+  for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
+    const a = keys[i], b = keys[j];
+    if (sheetOf(a) === sheetOf(b) || linked.has(a) || linked.has(b)) continue;
+    const d = dist(a, b);
+    if (d < NEAR_MISS && (!nearMiss || d < nearMiss.d)) nearMiss = { a, b, d };
+  }
 }
 function allWires() {
   const ok = k => sheets.get(sheetOf(k)).present;
@@ -347,9 +362,10 @@ function solveCircuit() {
   for (const s of present) {
     const a = node[s.keys[0]], b = node[s.keys[1]];
     let I;
-    if (s.def.type === 'cell') { I = (V[a] - V[cellInt]) / 0.02; r.cellI = I; r.hasCell = true; }
+    if (s.def.type === 'cell') I = (V[a] - V[cellInt]) / 0.02;
     else I = (V[a] - V[b]) / elemR[s.def.id];
     if (Math.abs(I) < 1e-6) I = 0;
+    if (s.def.type === 'cell') { r.cellI = I; r.hasCell = true; }
     r.elemI[s.def.id] = I;            // current from terminal 0 to terminal 1
     r.elemV[s.def.id] = V[a] - V[b];  // voltage of terminal 0 relative to terminal 1
   }
@@ -387,6 +403,9 @@ function applyResults() {
 // ---------------------------------------------------------------------------
 const WIRE_GEO = new THREE.CylinderGeometry(0.006, 0.006, 1, 8);
 const wirePool = [];
+const nearLine = new THREE.Mesh(WIRE_GEO, new THREE.MeshBasicMaterial({ color: 0xE0A43A, transparent: true, opacity: 0.6 }));
+nearLine.visible = false;
+board.add(nearLine);
 const UP = new THREE.Vector3(0, 1, 0);
 function drawWires(wires) {
   wires.forEach((w, i) => {
@@ -401,6 +420,15 @@ function drawWires(wires) {
     m.visible = true;
   });
   for (let i = wires.length; i < wirePool.length; i++) wirePool[i].visible = false;
+  if (nearMiss && result.hasCell && result.cellI === 0) {
+    const p = terminalPos(nearMiss.a), q = terminalPos(nearMiss.b);
+    const dx = q[0] - p[0], dy = q[1] - p[1], len = Math.hypot(dx, dy) || 1e-4;
+    nearLine.position.set((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 0.012);
+    nearLine.quaternion.setFromUnitVectors(UP, new THREE.Vector3(dx / len, dy / len, 0));
+    nearLine.scale.set(1, len, 1);
+    nearLine.material.opacity = 0.35 + 0.35 * Math.sin(performance.now() / 200);
+    nearLine.visible = true;
+  } else nearLine.visible = false;
 }
 
 const MAX_DOTS = 1200, SPACING = 0.04;
@@ -471,7 +499,11 @@ function frame(dt) {
     else if (selected) text = 'Now tap the dot to connect it to.';
     else if (result.short) { text = 'Short circuit! The cell is connected with almost nothing to limit the current.'; warn = true; }
     else if (!result.hasCell) text = 'Add the cell to power the circuit.';
-    else if (result.cellI === 0) text = 'No complete circuit yet. Tap one dot, then another, to add a wire.';
+    else if (result.cellI === 0 && nearMiss) {
+      const nm = k => sheets.get(sheetOf(k)).def.name;
+      text = `Not complete yet: move the ${nm(nearMiss.a)} and ${nm(nearMiss.b)} dots closer, or tap both to add a wire.`;
+    }
+    else if (result.cellI === 0) text = state.closed ? 'No complete circuit yet. Tap one dot, then another, to add a wire.' : 'The switch is open, so no current flows.';
     else text = '';
   }
   if (hint.textContent !== text) hint.textContent = text;
@@ -549,6 +581,11 @@ function bindControls() {
     $('toggleVals').textContent = t.hidden ? 'Show readings' : 'Hide readings';
   });
   $('clearWires').addEventListener('click', () => { manualWires = []; selected = null; });
+  $('lock').addEventListener('click', () => {
+    state.locked = !state.locked;
+    $('lock').setAttribute('aria-pressed', state.locked);
+    $('lock').textContent = state.locked ? 'Connections locked' : 'Lock connections';
+  });
   $('collapse').addEventListener('click', () => {
     const p = $('panel'); p.classList.toggle('collapsed');
     const open = !p.classList.contains('collapsed');
@@ -574,7 +611,12 @@ const PRESETS = {
     wires: [['cell:1', 'bulbA:0'], ['bulbA:0', 'bulbB:0'], ['bulbA:1', 'bulbB:1'], ['bulbB:1', 'ammeter:1'], ['ammeter:0', 'cell:0']]
   }
 };
+function unlock() {
+  state.locked = false;
+  $('lock').setAttribute('aria-pressed', 'false'); $('lock').textContent = 'Lock connections';
+}
 function loadPreset(p) {
+  unlock();
   for (const s of sheets.values()) s.present = false;
   manualWires = []; autoWires = []; selected = null;
   if (p) {
@@ -719,6 +761,13 @@ function start3D() {
 // AR view: track every sheet, remember where each one sits relative to the others
 // ---------------------------------------------------------------------------
 async function startAR() {
+  // MindAR asks for the camera without a resolution, which often gives a small 640x480
+  // feed. Ask for 1280x720 so sheets further from the camera can still be recognised.
+  const md = navigator.mediaDevices, origGUM = md.getUserMedia.bind(md);
+  md.getUserMedia = c => {
+    if (c && c.video && typeof c.video === 'object') { c.video.width = { ideal: 1280 }; c.video.height = { ideal: 720 }; }
+    return origGUM(c);
+  };
   const { MindARThree } = await import('mindar-image-three');
   const mindar = new MindARThree({
     container: $('view'),
@@ -740,6 +789,7 @@ async function startAR() {
   $('chipsNote').textContent = 'Sheets light up here once the camera has seen them. Tap a name to forget that sheet.';
   chipClick = s => { if (s.present) { removeSheet(s); renderChips(); } };
   $('forget').onclick = () => {
+    unlock();
     for (const s of sheets.values()) s.present = false;
     manualWires = []; autoWires = []; selected = null; renderChips();
   };
@@ -817,7 +867,7 @@ async function startAR() {
       if (!c || !xe) continue;
       const m = { x: c.x, y: c.y, a: Math.atan2(xe.y - c.y, xe.x - c.x) };
       if (!s.present) { s.present = true; s.pose = m; changed = true; continue; }
-      const k = 0.2;
+      const k = 0.15;
       let da = m.a - s.pose.a; da = Math.atan2(Math.sin(da), Math.cos(da));
       s.pose.x += (m.x - s.pose.x) * k; s.pose.y += (m.y - s.pose.y) * k; s.pose.a += da * k;
     }
@@ -864,3 +914,4 @@ $('startAR').addEventListener('click', async () => {
     showError('The camera could not start. Check that this browser is allowed to use the camera, or use the 3D view instead.');
   }
 });
+
