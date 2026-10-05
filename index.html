@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Circuit explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+  }
+}
+</script>
+<style>
+  :root{
+    --bench:#2C3A47; --paper:#FBFBF8; --ink:#1D2B3A; --muted:#566475;
+    --panel:#EDF0F3; --rule:#CDD4DB; --electron:#2F9BFF; --conv:#E0484E;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0; height:100%; overflow:hidden}
+  body{
+    font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    color:var(--ink); background:var(--bench);
+    display:flex; flex-direction:column;
+    padding-top:env(safe-area-inset-top,0px);
+  }
+  #view{position:relative; flex:1; min-height:200px; overflow:hidden}
+  #view canvas{display:block; touch-action:none}
+  #hint{position:absolute; left:12px; bottom:10px; color:#E3E9EF; font-size:14px; pointer-events:none;
+        text-shadow:0 1px 3px rgba(0,0,0,.6); z-index:5}
+
+  #panel{background:var(--panel); padding:10px 16px calc(14px + env(safe-area-inset-bottom,0px)); overflow-y:auto; max-height:52%}
+  #panel.collapsed .body{display:none}
+  @media (min-width:760px){
+    body{flex-direction:row}
+    #panel{width:320px; max-height:none; height:100%}
+  }
+  .head{display:flex; align-items:center; gap:8px; margin-bottom:6px}
+  .head h1{flex:1; font-size:19px; margin:0}
+  .head button{flex:0 0 auto; padding:6px 10px; font-size:14px}
+  .sub{margin:0 0 12px; font-size:14px; color:var(--muted)}
+  .ctrl{margin-bottom:8px}
+  .ctrl label{display:flex; justify-content:space-between; font-size:15px; font-weight:700}
+  .ctrl output{font-weight:400; font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%; height:28px; accent-color:var(--ink)}
+  .row{display:flex; gap:8px; margin:10px 0}
+  button, .btn{
+    flex:1; font:inherit; font-size:15px; padding:9px 8px; border-radius:8px; text-align:center; text-decoration:none;
+    border:2px solid var(--ink); background:var(--paper); color:var(--ink); cursor:pointer;
+  }
+  button[aria-pressed="true"]{background:var(--ink); color:var(--paper)}
+  button:focus-visible, input:focus-visible, .btn:focus-visible{outline:3px solid var(--electron); outline-offset:2px}
+  table{width:100%; border-collapse:collapse; font-size:14px; font-variant-numeric:tabular-nums}
+  td{padding:5px 0; border-top:1px solid var(--rule)}
+  td:last-child{text-align:right; font-weight:700}
+  .note{font-size:13px; color:var(--muted); margin:10px 0 0; line-height:1.45}
+  .dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px}
+  [hidden]{display:none !important}
+
+  /* Start screen */
+  #start{position:fixed; inset:0; z-index:50; background:var(--bench); color:var(--paper);
+         display:flex; align-items:center; justify-content:center; padding:24px}
+  #start .card{max-width:440px; width:100%}
+  #start h1{font-size:30px; margin:0 0 8px; line-height:1.15}
+  #start p{color:#C9D3DD; margin:0 0 20px; line-height:1.5}
+  #start .stack{display:flex; flex-direction:column; gap:10px}
+  #start button, #start .btn{padding:14px; font-size:17px}
+  #start .primary{background:var(--paper); color:var(--ink); border-color:var(--paper)}
+  #start .secondary{background:transparent; color:var(--paper); border-color:#8A99A8}
+  #start .msg{color:#FFB4B6; margin-top:14px}
+</style>
+</head>
+<body>
+
+<div id="start">
+  <div class="card">
+    <h1>Circuit explorer</h1>
+    <p>Point your camera at the printed worksheet to see the circuit in 3D, then change the voltage and resistance and watch what happens.</p>
+    <div class="stack">
+      <button id="startAR" class="primary">Start camera</button>
+      <button id="start3D" class="secondary">3D view without camera</button>
+      <a class="btn secondary" href="worksheet.pdf" target="_blank" rel="noopener">Print the worksheet</a>
+    </div>
+    <p class="msg" id="startMsg" hidden></p>
+  </div>
+</div>
+
+<div id="view"><div id="hint"></div></div>
+
+<div id="panel">
+  <div class="head">
+    <h1>Series circuit</h1>
+    <button id="collapse" aria-expanded="true">Hide controls</button>
+    <button id="back">Exit</button>
+  </div>
+  <div class="body">
+    <p class="sub">One cell, a switch, two bulbs and a variable resistor.</p>
+
+    <div class="ctrl">
+      <label for="volt">Cell voltage <output id="voltOut"></output></label>
+      <input id="volt" type="range" min="0" max="12" step="0.5" value="6">
+    </div>
+    <div class="ctrl">
+      <label for="rb">Resistance of each bulb <output id="rbOut"></output></label>
+      <input id="rb" type="range" min="1" max="20" step="1" value="6">
+    </div>
+    <div class="ctrl">
+      <label for="rv">Variable resistor <output id="rvOut"></output></label>
+      <input id="rv" type="range" min="0" max="30" step="1" value="6">
+    </div>
+
+    <div class="row"><button id="sw">Open the switch</button></div>
+
+    <div class="row" role="group" aria-label="What the moving dots show">
+      <button id="mElectron" aria-pressed="true">Electrons</button>
+      <button id="mConv" aria-pressed="false">Conventional current</button>
+    </div>
+
+    <div class="row"><button id="toggleVals">Hide readings</button></div>
+
+    <table id="vals">
+      <tr><td>Current (same everywhere)</td><td id="oI"></td></tr>
+      <tr><td>Voltage across bulb A</td><td id="oVA"></td></tr>
+      <tr><td>Voltage across bulb B</td><td id="oVB"></td></tr>
+      <tr><td>Voltage across variable resistor</td><td id="oVR"></td></tr>
+      <tr><td>Voltage across switch</td><td id="oVS"></td></tr>
+      <tr><td>Total resistance</td><td id="oRT"></td></tr>
+      <tr><td>Power in each bulb</td><td id="oP"></td></tr>
+    </table>
+
+    <p class="note" id="legend"></p>
+    <p class="note">Dot speeds are hugely exaggerated: real electrons drift at well under a millimetre per second. Bulbs are modelled as fixed resistors, although real filaments gain resistance as they heat up.</p>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
