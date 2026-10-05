@@ -59,6 +59,12 @@
   .note{font-size:13px; color:var(--muted); margin:10px 0 0; line-height:1.45}
   .dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px}
   [hidden]{display:none !important}
+  h2{font-size:16px; margin:16px 0 4px}
+  .chips{display:flex; flex-wrap:wrap; gap:6px; margin:8px 0}
+  .chips button{flex:0 0 auto; padding:6px 10px; font-size:14px; border-width:1.5px}
+  .chips button:disabled{opacity:.45; cursor:default}
+  #hint{right:12px; font-size:15px; font-weight:700}
+  #hint.warn{color:#FFD0D2}
 
   /* Start screen */
   #start{position:fixed; inset:0; z-index:50; background:var(--bench); color:var(--paper);
@@ -78,11 +84,11 @@
 <div id="start">
   <div class="card">
     <h1>Circuit explorer</h1>
-    <p>Point your camera at the printed worksheet to see the circuit in 3D, then change the voltage and resistance and watch what happens.</p>
+    <p>Lay out the printed component sheets like a circuit diagram, then point your camera at them to see the circuit come to life.</p>
     <div class="stack">
       <button id="startAR" class="primary">Start camera</button>
       <button id="start3D" class="secondary">3D view without camera</button>
-      <a class="btn secondary" href="worksheet.pdf" target="_blank" rel="noopener">Print the worksheet</a>
+      <a class="btn secondary" href="kit.pdf" target="_blank" rel="noopener">Print the kit</a>
     </div>
     <p class="msg" id="startMsg" hidden></p>
   </div>
@@ -92,12 +98,12 @@
 
 <div id="panel">
   <div class="head">
-    <h1>Series circuit</h1>
+    <h1>Circuit kit</h1>
     <button id="collapse" aria-expanded="true">Hide controls</button>
     <button id="back">Exit</button>
   </div>
   <div class="body">
-    <p class="sub">One cell, a switch, two bulbs and a variable resistor.</p>
+    <p class="sub" id="howto"></p>
 
     <div class="ctrl">
       <label for="volt">Cell voltage <output id="voltOut"></output></label>
@@ -108,8 +114,12 @@
       <input id="rb" type="range" min="1" max="20" step="1" value="6">
     </div>
     <div class="ctrl">
+      <label for="rr">Resistor <output id="rrOut"></output></label>
+      <input id="rr" type="range" min="1" max="50" step="1" value="10">
+    </div>
+    <div class="ctrl">
       <label for="rv">Variable resistor <output id="rvOut"></output></label>
-      <input id="rv" type="range" min="0" max="30" step="1" value="6">
+      <input id="rv" type="range" min="0" max="30" step="1" value="10">
     </div>
 
     <div class="row"><button id="sw">Open the switch</button></div>
@@ -119,17 +129,21 @@
       <button id="mConv" aria-pressed="false">Conventional current</button>
     </div>
 
-    <div class="row"><button id="toggleVals">Hide readings</button></div>
+    <h2>Sheets</h2>
+    <p class="note" id="chipsNote"></p>
+    <div class="chips" id="chips"></div>
+    <div class="row" id="presets" hidden>
+      <button id="pSeries">Series</button>
+      <button id="pParallel">Parallel</button>
+      <button id="pClear">Clear table</button>
+    </div>
+    <div class="row">
+      <button id="clearWires">Remove added wires</button>
+      <button id="forget" hidden>Forget layout</button>
+    </div>
 
-    <table id="vals">
-      <tr><td>Current (same everywhere)</td><td id="oI"></td></tr>
-      <tr><td>Voltage across bulb A</td><td id="oVA"></td></tr>
-      <tr><td>Voltage across bulb B</td><td id="oVB"></td></tr>
-      <tr><td>Voltage across variable resistor</td><td id="oVR"></td></tr>
-      <tr><td>Voltage across switch</td><td id="oVS"></td></tr>
-      <tr><td>Total resistance</td><td id="oRT"></td></tr>
-      <tr><td>Power in each bulb</td><td id="oP"></td></tr>
-    </table>
+    <div class="row"><button id="toggleVals">Hide readings</button></div>
+    <table id="vals"><tbody id="valsBody"></tbody></table>
 
     <p class="note" id="legend"></p>
     <p class="note">Dot speeds are hugely exaggerated: real electrons drift at well under a millimetre per second. Bulbs are modelled as fixed resistors, although real filaments gain resistance as they heat up.</p>

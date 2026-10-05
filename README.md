@@ -1,35 +1,40 @@
-# Circuit explorer
+# Circuit explorer kit
 
-A 3D series circuit that appears on top of a printed worksheet when viewed through a phone, iPad or laptop camera. It also has a 3D view that works without a camera.
+Each component is printed on its own A4 sheet. Students lay the sheets out like a circuit diagram, point a phone, iPad or laptop camera at them, and see the 3D circuit with moving charges, glowing bulbs and working meters. There is also a 3D view with no camera, where sheets can be dragged around a virtual table.
 
 ## Files
 
-- `index.html` – the page
-- `app.js` – circuit solver, 3D models, 3D view and camera (AR) view
-- `worksheet.png` – the worksheet image (also used as the paper in the 3D view)
-- `worksheet.pdf` – A4 landscape version for printing
-- `targets.mind` – the tracking data compiled from `worksheet.png`
+- `index.html`, `app.js` – the app
+- `kit.pdf` – all 9 sheets, one per A4 page, ready to print
+- `sheets/sheet-0.png` … `sheet-8.png` – the sheet images (also used in the 3D view)
+- `targets.mind` – tracking data for all 9 sheets, in this order:
+  0 Cell, 1 Switch, 2 Bulb A, 3 Bulb B, 4 Bulb C, 5 Resistor, 6 Variable resistor, 7 Ammeter, 8 Voltmeter
 
 ## Put it on GitHub Pages
 
-1. Create a free account at github.com and make a new **public** repository (for example `circuit-explorer`).
-2. Choose **Add file → Upload files**, drag in all five files, and click **Commit changes**.
-3. Go to **Settings → Pages**. Under "Build and deployment", set Source to **Deploy from a branch**, choose **main** and **/(root)**, and click **Save**.
-4. After a minute or two the page is live at `https://YOUR-USERNAME.github.io/circuit-explorer/`.
+If you already have the earlier version online, delete its old files first (or make a new repository).
 
-## Using it in class
+1. In your repository choose **Add file → Upload files**. Drag in `index.html`, `app.js`, `kit.pdf`, `targets.mind`, `README.md` and the whole `sheets` folder. Commit.
+2. **Settings → Pages** should still be set to "Deploy from a branch", **main**, **/(root)**.
+3. The page is live at `https://YOUR-USERNAME.github.io/REPOSITORY-NAME/` after a minute or two.
 
-- Print `worksheet.pdf` in colour or black and white. Keep the patterned border: the camera uses it to lock on.
-- Share the link (or a QR code of it). Students tap **Start camera** and allow camera access.
-- Laptops, or any device where the camera is blocked, can use **3D view without camera**.
-- To link it from Google Sites, insert a button or text link to the GitHub Pages address. (An embed won't be allowed to use the camera.)
+## How students use it
 
-## If you change the worksheet image
+- Lay sheets out like a circuit diagram. Each sheet has a terminal dot at each end.
+- **Dots close together (about a hand's width) join up automatically.** A simple loop of four sheets needs no wires at all.
+- **To add a wire,** tap one dot then another on screen (useful for corners, parallel branches and meters). Tap the same pair again to remove it.
+- Dot colours: green = connected, amber = loose, white = selected.
+- The app remembers where each sheet is, so the camera doesn't need to see every sheet at once. Keep at least one already-found sheet in view when bringing in a new one.
+- Ammeter and voltmeter sheets show their reading on a 3D display. Their red + terminal works like a real meter: connect it the wrong way round and the reading goes negative. An ammeter connected across a component shorts it out, as in real life.
+- If students move sheets around a lot, **Forget layout** starts afresh.
 
-`targets.mind` must match the printed image exactly. If you edit `worksheet.png`, recompile it with the MindAR compiler at
-https://hiukim.github.io/mind-ar-js-doc/tools/compile, download the result, rename it `targets.mind`, and upload it in place of the old one. Keep the circuit in the same place on the sheet, or update the layout numbers at the top of `app.js`.
+## Tips for reliable tracking
 
-## Notes
+- Print in colour if you can, on matt paper, and keep the patterned areas uncovered.
+- Good, even lighting helps. Avoid glare from windows.
+- Hold the device so each sheet takes up at least a fifth of the screen width. For bigger circuits, sweep the camera across the layout rather than trying to fit it all in.
+- About six sheets can be tracked at once; more will still be remembered.
 
-- Opening `index.html` directly from your computer won't work; it needs to be served over https (GitHub Pages does this).
-- Libraries load from the jsDelivr CDN: three.js 0.160.0 and MindAR 1.2.5.
+## Changing the sheets
+
+`targets.mind` has to match the sheet images exactly, in the order above. If you edit a sheet image, recompile all nine together (in order) at https://hiukim.github.io/mind-ar-js-doc/tools/compile and replace `targets.mind`.
